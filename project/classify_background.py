@@ -23,4 +23,27 @@ def classify_background(image):
         background = "neutral"
         print(background)
         return background
+
+
+def classify_images_in_folders(base_folder):
+    folders = ['Neutral', 'Noisy', 'Hand']
+    correct_classifications = 0
+    total_images = 0
     
+    for folder in folders:
+        folder_path = os.path.join(base_folder, folder)
+        actual_label = folder
+        
+        for filename in os.listdir(folder_path):
+            print(f"Processing {filename}")
+            img_path = os.path.join(folder_path, filename)
+            test_img = cv2.imread(img_path)
+            img_test = cv2.cvtColor(test_img, cv2.COLOR_BGR2RGB)
+
+            predicted_label = classify_background(img_test)
+            if predicted_label == actual_label:
+                correct_classifications += 1
+            total_images += 1
+
+    classification_rate = correct_classifications / total_images if total_images > 0 else 0
+    print(f"Classification rate: {classification_rate * 100:.2f}%")
