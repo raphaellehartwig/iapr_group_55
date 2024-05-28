@@ -45,7 +45,7 @@ def detect_and_display_circles_hand(img, display=False):
             circles = np.uint16(np.around(circles))[0, :]
             for (x, y, r) in circles:
                 plt.gca().add_patch(plt.Circle((x, y), r, color='red', fill=False, linewidth=2))
-        plt.title('Detected Circles in ' + os.path.basename(image_path))
+        plt.title('Detected Circles')
         plt.axis('off')
         plt.show()
 
@@ -86,7 +86,7 @@ def detect_and_display_circles_neutral(img, display=False):
             circles = np.uint16(np.around(circles))[0, :]
             for (x, y, r) in circles:
                 plt.gca().add_patch(plt.Circle((x, y), r, color='red', fill=False, linewidth=2))
-        plt.title('Detected Circles in ' + os.path.basename(image_path))
+        plt.title('Detected Circles in')
         plt.axis('off')
         plt.show()
 
@@ -97,31 +97,41 @@ def detect_and_display_circles_neutral(img, display=False):
 
 
 def detect_and_display_circles_noisy(img, display=False):
-    # img = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+    # Convert to HSV color space
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    data_h, data_s, data_v = cv2.split(hsv)
+
+    blur = cv2.GaussianBlur(hsv, (11, 11), 2)
+    data_h, data_s, data_v = cv2.split(blur)
+
+    # Apply thresholds to isolate the desired features
     img_th = np.zeros(data_s.shape, dtype=np.uint8)
-    img_th[(data_s > 0.4 * 255) & (data_h < 0.12 * 180)] = 255
-    # kernel = np.ones((7, 7), np.uint8)  # Define the kernel size
-    # img_th = cv2.morphologyEx(img_th, cv2.MORPH_CLOSE, kernel)
-    # plt.imshow(img_th)
+    # (hMin = 0 , sMin = 121, vMin = 0), (hMax = 24 , sMax = 255, vMax = 255)
+    # orange coins
+    img_th[(data_s > 120) & (data_h < 20)] = 255
+    # gray coins
+    img_th[(data_s > 82) & (data_h < 23) & (data_s < 170)] = 255
+    # for gray bright coins
+    img_th[(data_h > 9) & (data_h < 21) & (data_s < 82) & (data_s > 45) & (data_v < 240)] = 255
+    img_th[(data_h > 19) & (data_h < 23) & (data_s < 140) & (data_s > 67) & (data_v < 231)] = 255
+    # for bright yellow coins
+    # (hMin = 19 , sMin = 153, vMin = 210), (hMax = 25 , sMax = 255, vMax = 255)
+    img_th[(data_h > 19) & (data_v > 210) & (data_s > 153) & (data_h < 25)] = 255
 
-    # Apply GaussianBlur to reduce image noise and detail
-    blur = cv2.GaussianBlur(img_th, (9, 9), 2)
+    # Apply morphological operations:
+    kernel = np.ones((5, 5), np.uint8)
+    closing = cv2.morphologyEx(img_th, cv2.MORPH_CLOSE, kernel, iterations=2)
+    kernel = np.ones((6, 6), np.uint8)
+    opening = cv2.morphologyEx(closing, cv2.MORPH_OPEN, kernel, iterations=4)
 
-    # Detect circles in the image using HoughCircles
-    """"
-    mindist = distance entre 2 cercles :/ => tricky
-    param 1 = higher threshold of canny detector => the higher the less edges it detects, bien pour ne pas detecter les unnecessary edges
-    param 2 = the smaller it is the more circles it dtects, including false circles
+    # Apply Gaussian Blur to the cleaned image
+    blur = cv2.GaussianBlur(closing, (3, 3), 2)
 
-    """
-    circles = cv2.HoughCircles(blur, cv2.HOUGH_GRADIENT, dp=1.2, minDist=50, param1=50, param2=40, minRadius=30,
-                               maxRadius=100)
-
+    # Find contours in the preprocessed image
+    circles = cv2.HoughCircles(opening, cv2.HOUGH_GRADIENT, dp=1., minDist=80, param1=200
+                               , param2=10, minRadius=40, maxRadius=120)
     # Convert the (x, y) coordinates and radius of the circles to integers
-    """if circles is not None:
-        circles = np.uint16(np.around(circles))[0, :]"""
+    if circles is not None:
+        circles = np.uint16(np.around(circles))[0, :]
 
     # Plot the image with circles
     if display:
@@ -130,12 +140,12 @@ def detect_and_display_circles_noisy(img, display=False):
         if circles is not None:
             for (x, y, r) in circles:
                 plt.gca().add_patch(plt.Circle((x, y), r, color='red', fill=False, linewidth=2))
-        plt.title('Detected Circles in ' + os.path.basename(image_path))
+        plt.title('Detected Circles')
         plt.axis('off')
         plt.show()
 
     if circles is not None:
-        return [(x, y, r) for (x, y, r) in np.uint16(np.around(circles))[0, :]]
+        return [(x, y, r) for (x, y, r) in circles]
     else:
         return []
 
@@ -144,14 +154,15 @@ def crop_coins(image, circles):
     cropped_images = []
     for (x, y, r) in circles:
         x, y, r = int(x), int(y), int(r)
-        cropped_img = image[y - r:y + r, x - r:x + r]
+        cropped_img = image[y-r:y+r, x-r:x+r]
         cropped_images.append(cropped_img)
     return cropped_images
 
 
-def detect_and_crop_coins(img, image_type, display_cropped=True):
+def detect_and_crop_coins(image_type, display_cropped=True, img=None, img_path=None):
     # Load the image
-    # img = cv2.imread(image_path, cv2.IMREAD_COLOR)
+    if img_path is not None:
+        img = cv2.imread(img_path, cv2.IMREAD_COLOR)
     """if img is None:
         print("Error: Image not found at", image_path)
         return None"""
@@ -183,7 +194,7 @@ def detect_and_crop_coins(img, image_type, display_cropped=True):
             plt.axis('off')
             plt.show()
 
-    return cropped_images
+    return cropped_images, circles
 
 
 def process_images_in_directory(directory_path, image_type, display_cropped=True):
