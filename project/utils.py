@@ -44,10 +44,8 @@ def compute_accuracy(outputs, labels):
     accuracy = n_correct/labels.numel()
     return accuracy
 
-
 def compute_f1(outputs, labels):
-    preds = compute_pred(outputs)
-    preds = np.array(preds)
+    preds = np.array(outputs)
     labels = np.array(labels)
     score = 0
     for i, true_label in enumerate(labels):
