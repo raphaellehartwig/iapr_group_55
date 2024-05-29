@@ -43,17 +43,40 @@ def detect_and_display_circles_neutral(img, display=False):
 
 ### NOISY
 def detect_and_display_circles_noisy(img, display=False):
+    
+    
+   # Convert to HSV color space
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    data_h, data_s, data_v = cv2.split(hsv)
+    
+    blur = cv2.GaussianBlur(hsv, (11, 11), 2)
+    data_h, data_s, data_v = cv2.split(blur)
+
+    # Apply thresholds to isolate the desired features
     img_th = np.zeros(data_s.shape, dtype=np.uint8)
-    img_th[(data_s > 0.4 * 255) & (data_h < 0.12 * 180)] = 255
+    #(hMin = 0 , sMin = 121, vMin = 0), (hMax = 24 , sMax = 255, vMax = 255)
+    #orange coins
+    img_th[(data_s > 120) & (data_h < 20)] = 255 
+    # gray coins 
+    img_th[(data_s > 82) & (data_h < 23) & (data_s < 170)] = 255  
+    # for gray bright coins
+    img_th[(data_h > 9) & (data_h < 21) & (data_s < 82) & (data_s > 45) & (data_v < 240) ] = 255 
+    img_th[(data_h > 19) & (data_h < 23) & (data_s < 140) & (data_s > 67) & (data_v < 231) ] = 255 
+    # for bright yellow coins 
+    #(hMin = 19 , sMin = 153, vMin = 210), (hMax = 25 , sMax = 255, vMax = 255)
+    img_th[(data_h > 19) & (data_v > 210) &  (data_s > 153) & (data_h < 25) ] = 255
 
-    # Apply GaussianBlur to reduce image noise and detail
-    blur = cv2.GaussianBlur(img_th, (9, 9), 2)
+    # Apply morphological operations: 
+    kernel = np.ones((5, 5), np.uint8)
+    closing = cv2.morphologyEx(img_th, cv2.MORPH_CLOSE ,kernel, iterations = 2)
+    kernel = np.ones((6,6), np.uint8)
+    opening = cv2.morphologyEx(closing, cv2.MORPH_OPEN, kernel, iterations = 4)
+    
+    # Apply Gaussian Blur to the cleaned image
+    blur = cv2.GaussianBlur(closing, (3, 3), 2)
 
-    # Detect circles in the image using HoughCircles
-    circles = cv2.HoughCircles(blur, cv2.HOUGH_GRADIENT, dp=1.2, minDist=50, param1=50, param2=40, minRadius=30,
-                               maxRadius=100)
+    # Find contours in the preprocessed image
+    circles = cv2.HoughCircles(opening, cv2.HOUGH_GRADIENT, dp=1., minDist=80, param1=200
+                               , param2=10, minRadius=40, maxRadius=120)
 
     # Convert the (x, y) coordinates and radius of the circles to integers
     if circles is not None:
