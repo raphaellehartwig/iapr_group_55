@@ -24,11 +24,16 @@ def detect_and_display_circles_neutral(img, display=False):
     circles = cv2.HoughCircles(closing, cv2.HOUGH_GRADIENT, dp=1, minDist=100,
                                param1=50, param2=10, minRadius=50, maxRadius=120)
 
+    # Convert the (x, y) coordinates and radius of the circles to integers
+    if circles is not None:
+        circles = np.uint16(np.around(circles))[0, :]
+
+    # Plot the image with circles
     if display:
         plt.figure(figsize=(8, 8))
         plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
         if circles is not None:
-            circles = np.uint16(np.around(circles))[0, :]
+            #    circles = np.uint16(np.around(circles))[0, :]
             for (x, y, r) in circles:
                 plt.gca().add_patch(plt.Circle((x, y), r, color='red', fill=False, linewidth=2))
         plt.title('Detected Circles')
@@ -36,47 +41,45 @@ def detect_and_display_circles_neutral(img, display=False):
         plt.show()
 
     if circles is not None:
-        return [(x, y, r) for (x, y, r) in np.uint16(np.around(circles))[0, :]]
+        return [(x, y, r) for (x, y, r) in circles]
     else:
         return []
 
 
 ### NOISY
 def detect_and_display_circles_noisy(img, display=False):
-    
-    
-   # Convert to HSV color space
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    
+
+    # Apply Gaussian Blur to the image
     blur = cv2.GaussianBlur(hsv, (11, 11), 2)
     data_h, data_s, data_v = cv2.split(blur)
 
     # Apply thresholds to isolate the desired features
     img_th = np.zeros(data_s.shape, dtype=np.uint8)
-    #(hMin = 0 , sMin = 121, vMin = 0), (hMax = 24 , sMax = 255, vMax = 255)
-    #orange coins
-    img_th[(data_s > 120) & (data_h < 20)] = 255 
-    # gray coins 
-    img_th[(data_s > 82) & (data_h < 23) & (data_s < 170)] = 255  
+    # (hMin = 0 , sMin = 121, vMin = 0), (hMax = 24 , sMax = 255, vMax = 255)
+    # orange coins
+    img_th[(data_s > 120) & (data_h < 20)] = 255
+    # gray coins
+    img_th[(data_s > 82) & (data_h < 23) & (data_s < 170)] = 255
     # for gray bright coins
-    img_th[(data_h > 9) & (data_h < 21) & (data_s < 82) & (data_s > 45) & (data_v < 240) ] = 255 
-    img_th[(data_h > 19) & (data_h < 23) & (data_s < 140) & (data_s > 67) & (data_v < 231) ] = 255 
-    # for bright yellow coins 
-    #(hMin = 19 , sMin = 153, vMin = 210), (hMax = 25 , sMax = 255, vMax = 255)
-    img_th[(data_h > 19) & (data_v > 210) &  (data_s > 153) & (data_h < 25) ] = 255
+    img_th[(data_h > 9) & (data_h < 21) & (data_s < 82) & (data_s > 45) & (data_v < 240)] = 255
+    img_th[(data_h > 19) & (data_h < 23) & (data_s < 140) & (data_s > 67) & (data_v < 231)] = 255
+    # for bright yellow coins
+    # (hMin = 19 , sMin = 153, vMin = 210), (hMax = 25 , sMax = 255, vMax = 255)
+    img_th[(data_h > 19) & (data_v > 210) & (data_s > 153) & (data_h < 25)] = 255
 
-    # Apply morphological operations: 
+    # Apply morphological operations
     kernel = np.ones((5, 5), np.uint8)
-    closing = cv2.morphologyEx(img_th, cv2.MORPH_CLOSE ,kernel, iterations = 2)
-    kernel = np.ones((6,6), np.uint8)
-    opening = cv2.morphologyEx(closing, cv2.MORPH_OPEN, kernel, iterations = 4)
-    
+    closing = cv2.morphologyEx(img_th, cv2.MORPH_CLOSE, kernel, iterations=2)
+    kernel = np.ones((6, 6), np.uint8)
+    opening = cv2.morphologyEx(closing, cv2.MORPH_OPEN, kernel, iterations=4)
+
     # Apply Gaussian Blur to the cleaned image
-    blur = cv2.GaussianBlur(closing, (3, 3), 2)
+    #blur = cv2.GaussianBlur(opening, (3, 3), 2)
 
     # Find contours in the preprocessed image
-    circles = cv2.HoughCircles(opening, cv2.HOUGH_GRADIENT, dp=1., minDist=80, param1=200
-                               , param2=10, minRadius=40, maxRadius=120)
+    circles = cv2.HoughCircles(opening, cv2.HOUGH_GRADIENT, dp=1., minDist=80, param1=200, param2=10, minRadius=40,
+                               maxRadius=120)
 
     # Convert the (x, y) coordinates and radius of the circles to integers
     if circles is not None:
@@ -87,7 +90,7 @@ def detect_and_display_circles_noisy(img, display=False):
         plt.figure(figsize=(8, 8))
         plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
         if circles is not None:
-        #    circles = np.uint16(np.around(circles))[0, :]
+            #    circles = np.uint16(np.around(circles))[0, :]
             for (x, y, r) in circles:
                 plt.gca().add_patch(plt.Circle((x, y), r, color='red', fill=False, linewidth=2))
         plt.title('Detected Circles')
@@ -239,6 +242,29 @@ def detect_and_crop_coins(image_type, img=None, img_path=None, display_cropped=F
             plt.show()
 
     return cropped_images, circles
+
+
+def crop_whole_directory(root_path, root_output, img_type, save=True):
+    all_images = []
+    total_coins = 1
+    for root, dirs, files in os.walk(root_path + img_type):
+        for i, file in enumerate(files):
+            if file.endswith('.JPG'):
+                # construct path to the image file
+                file_path = os.path.join(root, file)
+                if img_type == 'noisy':
+                    im = cv2.imread(file_path, cv2.IMREAD_UNCHANGED)
+                else:
+                    im = cv2.imread(file_path, cv2.IMREAD_COLOR)
+                cropped_img = detect_and_crop_coins(img=np.array(im), image_type=img_type, display_cropped=False)
+                all_images.append(cropped_img)
+                if save:
+                    for j, cropped_img in enumerate(cropped_img):
+                        output_path = os.path.join(root_output, f'{total_coins}.png')
+                        cv2.imwrite(output_path, cropped_img)
+                        total_coins += 1
+                        print(f'Saved cropped image to {output_path}')
+    return all_images
 
 
 def process_images_in_directory(directory_path, image_type, display_cropped=True):

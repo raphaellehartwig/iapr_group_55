@@ -13,6 +13,7 @@ from sklearn.metrics import f1_score
 from sklearn.model_selection import KFold
 from torch.utils.data import Subset
 
+
 class LinearClassifier(nn.Module):
     def __init__(self, input_features=20*256*36, num_classes=3):
         super(LinearClassifier, self).__init__()
@@ -38,7 +39,7 @@ def create_classifier_from_alexnet(num_outputs):
 
 
 def train_model(model, criterion, optimizer, scheduler, data_train, data_val, device, batch_size=4, num_epochs=25,
-                verbose=True):
+                verbose=True, phases=['train', 'val'], sampler=None):
     since = time.time()
     train_losses = []
     val_losses = []
@@ -61,10 +62,13 @@ def train_model(model, criterion, optimizer, scheduler, data_train, data_val, de
                 print('-' * 10)
 
             # Each epoch has a training and validation phase
-            for phase in ['train', 'val']:
+            for phase in phases:
                 if phase == 'train':
                     model.train()  # Set model to training mode
-                    dataloader = DataLoader(data_train, batch_size=batch_size, shuffle=True)
+                    if sampler is None:
+                        dataloader = DataLoader(data_train, batch_size=batch_size, shuffle=True)
+                    else:
+                        dataloader = DataLoader(data_train, batch_size=batch_size, sampler=sampler)
                     data_length = len(data_train)
                 else:
                     model.eval()   # Set model to evaluate mode
@@ -101,7 +105,6 @@ def train_model(model, criterion, optimizer, scheduler, data_train, data_val, de
                     running_loss += loss.item() * inputs.size(0)
                     running_corrects += torch.sum(preds_batch == torch.argmax(labels, dim=1))
                     running_f1 += f1_score(preds_batch, torch.argmax(labels, dim=1), average='macro')
-                    #print(torch.argmax(labels, dim=1))
 
                 epoch_loss = running_loss/data_length
                 epoch_accuracy = running_corrects.double()/data_length
@@ -130,10 +133,11 @@ def train_model(model, criterion, optimizer, scheduler, data_train, data_val, de
 
         time_elapsed = time.time() - since
         print(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s')
-        print(f'Best val F1_score: {best_f1:4f} at epoch: {best_epoch}')
+        if 'val' in phases:
+            print(f'Best val F1_score: {best_f1:4f} at epoch: {best_epoch}')
 
         # load best model weights
-        model.load_state_dict(torch.load(best_model_params_path))
+        #model.load_state_dict(torch.load(best_model_params_path))
 
     return model, train_losses, val_losses, train_accuracies, val_accuracies, train_f1, val_f1, preds
 
@@ -165,7 +169,8 @@ def get_all_features(image_list, bg_type, model_features, target_size=20*256*36)
 
 
 def cross_validate_learning_rate(criterion, optimizer_class, scheduler_class, data, device, num_epochs=11,
-                                 batch_size=6, lr_candidates=[0.001, 0.01, 0.1, 1.0], num_folds=5, verbose=True):
+                                 batch_size=6, lr_candidates=[0.001, 0.01, 0.1, 1.0], num_folds=5, verbose=True,
+                                 model_name='alexnet'):
 
     best_lr = lr_candidates[0]
     best_f1 = 0
@@ -180,18 +185,25 @@ def cross_validate_learning_rate(criterion, optimizer_class, scheduler_class, da
             train_subset = Subset(data, train_idx)
             val_subset = Subset(data, val_idx)
 
-            model = torchvision.models.alexnet(weights='IMAGENET1K_V1')  # Create a new instance of the model
-            num_ftrs = model.classifier[-1].in_features
-            model.classifier[-1] = nn.Linear(num_ftrs, 3)
-            model = model.to(device)
+            if model_name == 'alexnet':
+                model = torchvision.models.alexnet(weights='IMAGENET1K_V1')  # Create a new instance of the model
+                num_ftrs = model.classifier[-1].in_features
+                model.classifier[-1] = nn.Linear(num_ftrs, 3)
+                params = model.classifier.parameters()
+            if model_name == 'resnet':
+                model = torchvision.models.resnet18(weights='IMAGENET1K_V1')
+                num_ftrs = model.fc.in_features
+                model.fc = nn.Linear(num_ftrs, 8)
+                params = model.fc.parameters()
 
-            optimizer = optimizer_class(model.classifier.parameters(), lr=lr)
+            model = model.to(device)
+            optimizer = optimizer_class(params, lr=lr)
             scheduler = scheduler_class(optimizer, step_size=7, gamma=0.1)
 
             _, _, _, _, _, _, val_f1, _ = train_model(model, criterion, optimizer, scheduler, train_subset,
                                                       val_subset, device, num_epochs=num_epochs, batch_size=batch_size,
                                                       verbose=False)
-            fold_f1_scores.append(val_f1[-1])  # Use the F1 score from the last epoch
+            fold_f1_scores.append(torch.max(torch.tensor(val_f1)))  # Use the max F1
 
         avg_f1 = sum(fold_f1_scores) / num_folds
         results.append((lr, avg_f1))

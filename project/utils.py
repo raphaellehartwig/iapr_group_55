@@ -26,6 +26,7 @@ def plot_metric(train_metrics, val_metrics, title, ylabel):
     plt.title(title)
     plt.xlabel('Epoch')
     plt.ylabel(ylabel)
+    plt.grid()
     plt.show()
 
 

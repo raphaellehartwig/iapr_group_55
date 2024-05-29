@@ -37,7 +37,7 @@ def classify_area(area):
 
 def classify_area_b(area, B):
     # 0.05
-    if B < 97 & area < 9000:
+    if B < 97 and area < 9000:
         return 6
     # 5
     if area > 24000:
@@ -65,23 +65,24 @@ def circle_area(circle):
 
     return area
 
+
 def get_blue(image):
     # Calculate the center of the image
-        height, width = image.shape[:2]
-        center_x, center_y = width // 2, height // 2
+    height, width = image.shape[:2]
+    center_x, center_y = width // 2, height // 2
 
-        # Calculate the coordinates for the 50x50 square
-        top_left_x = max(center_x - 25, 0)
-        top_left_y = max(center_y - 25, 0)
-        bottom_right_x = min(center_x + 25, width)
-        bottom_right_y = min(center_y + 25, height)
+    # Calculate the coordinates for the 50x50 square
+    top_left_x = max(center_x - 25, 0)
+    top_left_y = max(center_y - 25, 0)
+    bottom_right_x = min(center_x + 25, width)
+    bottom_right_y = min(center_y + 25, height)
 
-        # Extract the 50x50 region from the middle of the image
-        square = image[top_left_y:bottom_right_y, top_left_x:bottom_right_x]
-        rgb = cv2.cvtColor(square, cv2.COLOR_BGR2RGB)
-        data_r, data_g, data_b = cv2.split(rgb)
-        
-        return data_b.mean()
+    # Extract the 50x50 region from the middle of the image
+    square = image[top_left_y:bottom_right_y, top_left_x:bottom_right_x]
+    rgb = cv2.cvtColor(square, cv2.COLOR_BGR2RGB)
+    data_r, data_g, data_b = cv2.split(rgb)
+
+    return data_b.mean()
 
 
 ### CLASSIFY CHF/EUR/OOD
@@ -139,13 +140,14 @@ def load_images_and_backgrounds(folder, downsampled_folder, downsampled=True):
                 downsampled_path = os.path.join(downsampled_folder, file)
                 if background == 'noisy':
                     im_reduced = cv2.imread(downsampled_path, cv2.IMREAD_UNCHANGED)
+
                 else:
                     im_reduced = cv2.imread(downsampled_path, cv2.IMREAD_COLOR)
                 images.append(im_reduced)
                     
                 ids.append(img_id)
                 backgrounds.append(background)
-                print(background)
+                #print(background)
 
     return images, ids, backgrounds
 
@@ -170,6 +172,8 @@ def predict(images, ids, backgrounds, model_path1, model_path2):
 
         if len(cropped_images) != 0:
             for coin, circle in zip(cropped_images, circles):
+                coin_np = coin
+                #print(coin_np)
                 new_circle = detect_circles_classification(coin)
                 coin = transform(coin)
                 coin = coin.unsqueeze(0)
@@ -180,9 +184,9 @@ def predict(images, ids, backgrounds, model_path1, model_path2):
                 
                 if output == 0:
                     area = circle_area(new_circle)
-                    #data_b = get_blue(coin)
-                    #label = classify_area_b(area, data_b)
-                    label = classify_area(area)
+                    data_b = get_blue(coin_np)
+                    label = classify_area_b(area, data_b)
+                    #label = classify_area(area)
                 
                 if output == 1:
                     with torch.no_grad():

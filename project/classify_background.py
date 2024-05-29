@@ -11,17 +11,17 @@ def classify_background(image):
 
     if (np.sum(threshold_noisy)) > 1000000:
         background = "noisy"
-        print(background)
+        #print(background)
         return background
        
     elif np.sum(threshold_hand) > 500000:
         background = "hand"
-        print(background)
+        #print(background)
         return background
     
     else:
         background = "neutral"
-        print(background)
+        #print(background)
         return background
 
 
