@@ -7,6 +7,12 @@ import glob
 
 ### NEUTRAL
 def detect_and_display_circles_neutral(img, display=False):
+    """
+    Detects the circles in an image with neutral background
+    :param img: np.array, the image in which to find the circles
+    :param display: whether to display the circles, default=False
+    :return: list of the position (x,y) and radius of all circles found in the image
+    """
     # Load the image
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
@@ -14,13 +20,12 @@ def detect_and_display_circles_neutral(img, display=False):
     blur = cv2.GaussianBlur(gray, (9, 9), 2)
 
     # Apply adaptive thresholding and morphological operations
-    img_th = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                   cv2.THRESH_BINARY_INV, 11, 2)
+    img_th = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
     kernel = np.ones((7, 7), np.uint8)
     closing = cv2.morphologyEx(img_th, cv2.MORPH_CLOSE, kernel)
     closing = cv2.dilate(closing, kernel, iterations=3)
 
-    # Hough Circle Transform
+    # Hough Circle Transform -> find circles
     circles = cv2.HoughCircles(closing, cv2.HOUGH_GRADIENT, dp=1, minDist=100,
                                param1=50, param2=10, minRadius=50, maxRadius=120)
 
@@ -48,6 +53,13 @@ def detect_and_display_circles_neutral(img, display=False):
 
 ### NOISY
 def detect_and_display_circles_noisy(img, display=False):
+    """
+    Detects the circles in an image with noisy background
+    :param img: np.array, the image in which to find the circles
+    :param display: whether to display the circles, default=False
+    :return: list of the position (x,y) and radius of all circles found in the image
+    """
+    # convert to hsv
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
     # Apply Gaussian Blur to the image
@@ -73,9 +85,6 @@ def detect_and_display_circles_noisy(img, display=False):
     closing = cv2.morphologyEx(img_th, cv2.MORPH_CLOSE, kernel, iterations=2)
     kernel = np.ones((6, 6), np.uint8)
     opening = cv2.morphologyEx(closing, cv2.MORPH_OPEN, kernel, iterations=4)
-
-    # Apply Gaussian Blur to the cleaned image
-    #blur = cv2.GaussianBlur(opening, (3, 3), 2)
 
     # Find contours in the preprocessed image
     circles = cv2.HoughCircles(opening, cv2.HOUGH_GRADIENT, dp=1., minDist=80, param1=200, param2=10, minRadius=40,
@@ -105,6 +114,12 @@ def detect_and_display_circles_noisy(img, display=False):
 
 ### HAND
 def detect_and_display_circles_hand(img, display=False):
+    """
+    Detects the circles in an image with hand background
+    :param img: np.array, the image in which to find the circles
+    :param display: whether to display the circles, default=False
+    :return: list of the position (x,y) and radius of all circles found in the image
+    """
     # Load the image
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
@@ -155,13 +170,19 @@ def detect_and_display_circles_hand(img, display=False):
 
 
 def crop_coins(image, circles):
+    """
+    Crops squares images around all circles
+    :param image: image to crop
+    :param circles: (x, y, r): circles found on the image
+    :return: list of cropped images, each containing one circle
+    """
     cropped_images = []
     height, width = image.shape[:2]
 
     for (x, y, r) in circles:
         x, y, r = int(x), int(y), int(r)
 
-        # Calculate the coordinates, ensuring they stay within image bounds
+        # crop the image and make sure we do not go outside the image's boundaries
         x_min = max(0, x - r)
         x_max = min(width, x + r)
         y_min = max(0, y - r)
@@ -174,12 +195,18 @@ def crop_coins(image, circles):
 
 
 def detect_circles_classification(img, display=False):
+    """
+    Detects the circles in an image containing one coin (cropped)
+    :param img: np.array, image containing a coin
+    :param display: whether to display the circles, default=False
+    :return: list of the position (x,y) and radius of all circles found in the image
+    """
     # Load the image
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     # Apply Gaussian Blur
     blur = cv2.GaussianBlur(gray, (9, 9), 2)
-
+    # Get the circles
     circles = cv2.HoughCircles(blur, cv2.HOUGH_GRADIENT, dp=1, minDist=100,
                                param1=60, param2=10, minRadius=50, maxRadius=120)
 
@@ -206,13 +233,18 @@ def detect_circles_classification(img, display=False):
         return (0, 0, 0)
 
 
-def detect_and_crop_coins(image_type, img=None, img_path=None, display_cropped=False,):
+def detect_and_crop_coins(image_type, img=None, img_path=None, display_cropped=False):
+    """
+    Detects the circles in an image and returns cropped images containing each circle
+    :param image_type: either 'noisy', 'neutral' or 'hand'
+    :param img: np.array, the image in which to find the circles
+    :param img_path: string, the path to load the image from, only if img is not specified
+    :param display: whether to display the cropped images, default=False
+    :return: list of cropped images and list of circles that have been used to crop them
+    """
     # Load the image
     if img_path is not None:
         img = cv2.imread(img_path, cv2.IMREAD_COLOR)
-    """if img is None:
-        print("Error: Image not found at", image_path)
-        return None"""
 
     # Call the appropriate detection function
     if image_type == 'neutral':
@@ -245,6 +277,14 @@ def detect_and_crop_coins(image_type, img=None, img_path=None, display_cropped=F
 
 
 def crop_whole_directory(root_path, root_output, img_type, save=True):
+    """
+    Given a directory of one type of image, crop all images inside and optionally save them in another directory
+    :param root_path: directory to crop
+    :param root_output: directory to save the crop
+    :param img_type: 'neutral', 'noisy' or 'hand'
+    :param save: whether to save the crop
+    :return: list of all cropped images
+    """
     all_images = []
     total_coins = 1
     for root, dirs, files in os.walk(root_path + img_type):
@@ -268,10 +308,15 @@ def crop_whole_directory(root_path, root_output, img_type, save=True):
 
 
 def process_images_in_directory(directory_path, image_type, display_cropped=True):
+    """
+    Detect the circles on each image of the directory
+    """
     if image_type == 'neutral':
         detect_and_display_circles = detect_and_display_circles_neutral
     elif image_type == 'hand':
         detect_and_display_circles = detect_and_display_circles_hand
+    elif image_type == 'noisy':
+        detect_and_display_circles = detect_and_display_circles_noisy
     else:
         print("Error: Unknown image type")
         return
