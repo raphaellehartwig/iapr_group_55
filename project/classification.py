@@ -2,40 +2,16 @@ import torch
 import torchvision
 import torch.nn as nn
 import torchvision.transforms as transforms
-
-import numpy as np
 import pandas as pd
 
 from segmentation import *
 from classify_background import *
 
 
-### CLASSIFY BACKGROUND
-def classify_area(area):
-    # 5
-    if area > 25000:
-        return 0
-    # 2
-    elif area > 17000:
-        return 1
-    # 1
-    elif area > 12000:
-        return 2
-    # 0.2
-    elif area > 10800:
-        return 4
-    # 0.1
-    elif area > 10000:
-        return 5
-    # 0.5
-    elif area > 9000:
-        return 3
-    # 0.05
-    else:
-        return 6
-    
-
 def classify_area_b(area, B):
+    """
+    Given an area and the mean of the blue channel, determine the value of a swiss franc coin.
+    """
     # 0.05
     if B < 97 and area < 9000:
         return 6
@@ -60,6 +36,9 @@ def classify_area_b(area, B):
     
 
 def circle_area(circle):
+    """
+    Computes the area of a circle
+    """
     (x, y, r) = circle
     area = np.pi * r ** 2
 
@@ -67,6 +46,9 @@ def circle_area(circle):
 
 
 def get_blue(image):
+    """
+    Extract the mean value of the blue channel of a 50x50 square in the middle of the image.
+    """
     # Calculate the center of the image
     height, width = image.shape[:2]
     center_x, center_y = width // 2, height // 2
@@ -87,8 +69,12 @@ def get_blue(image):
 
 ### CLASSIFY CHF/EUR/OOD
 def load_model1(model_path1):
+    """
+    Load an alexnet model for 3 classes prediciton using saved weights.
+    """
     model1 = torchvision.models.alexnet(weights='IMAGENET1K_V1')
 
+    # replace last layer by 3 output classifier
     num_ftrs = model1.classifier[-1].in_features
     model1.classifier[-1] = nn.Linear(num_ftrs, 3)
 
@@ -99,8 +85,12 @@ def load_model1(model_path1):
 
 ### CLASSIFY EUR SUBCLASSES
 def load_model2(model_path2):
+    """
+    Load a resnet18 model for 8 classes prediction using saved weight.
+    """
     model2 = torchvision.models.resnet18(weights='IMAGENET1K_V1')
 
+    # replace last layer by 8 output classifier
     num_ftrs = model2.fc.in_features
     model2.fc = nn.Linear(num_ftrs, 8)
 
@@ -110,10 +100,13 @@ def load_model2(model_path2):
 
 
 def transform(coin):
+    """
+    Preprocesses the input image to be put into models trained on imagenet1k.
+    """
     transform = transforms.Compose([
         transforms.ToPILImage(),
         transforms.Resize((224, 224)),  # Resize to match model's input size
-        transforms.ToTensor(),  # Convert PIL image to tensor
+        transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # Normalize pixel values, based on imagenet
     ])
 
@@ -121,7 +114,13 @@ def transform(coin):
     return transformed_coin
 
 
-def load_images_and_backgrounds(folder, downsampled_folder, downsampled=True):
+def load_images_and_backgrounds(folder, downsampled_folder):
+    """
+    Find the background and image id of all images in folder
+    :param folder: folder of original images, used to find the background
+    :param downsampled_folder: folder of downsampled images, returned by the function
+    :return: lists of images, ids and backgrounds sorted in the same order
+    """
     images = []
     ids = []
     backgrounds = []
@@ -133,37 +132,48 @@ def load_images_and_backgrounds(folder, downsampled_folder, downsampled=True):
                 # Construct path to the image file
                 file_path = os.path.join(root, file)
                 img_id = file[:-4]
+                # read original image -> used to classify background
                 im_original = cv2.imread(file_path, cv2.IMREAD_COLOR)
 
                 # Classify background
                 background = classify_background(im_original)
                 downsampled_path = os.path.join(downsampled_folder, file)
+                # if noisy load downsampled image using UNCHANGED colors
                 if background == 'noisy':
                     im_reduced = cv2.imread(downsampled_path, cv2.IMREAD_UNCHANGED)
-
+                # else load downsampled image using IMREAD colors
                 else:
                     im_reduced = cv2.imread(downsampled_path, cv2.IMREAD_COLOR)
+
                 images.append(im_reduced)
-                    
                 ids.append(img_id)
                 backgrounds.append(background)
-                #print(background)
 
     return images, ids, backgrounds
 
 
 def predict(images, ids, backgrounds, model_path1, model_path2):
+    """
+    Predict the number of each coins for each image in images.
+    :param images: list of images
+    :param ids: list of ids corresponding to images
+    :param backgrounds: list of backgrounds corresponding to images
+    :param model_path1: path of the model classifying the currency
+    :param model_path2: path of the model classifying euros
+    :return: prediction of the number of each currency, predictino of the number of each exact coin
+    """
     predictions = {}
     subclasses = {}
 
+    # load DL models
     model1 = load_model1(model_path1)
     model2 = load_model2(model_path2)
-
     model1.eval()
     model2.eval()
 
     for i, (background, img) in enumerate(zip(backgrounds, images)):
         print(ids[i])
+        # crop the image
         cropped_images, circles = detect_and_crop_coins(background, np.array(img))
 
         pred = np.zeros(3)
@@ -173,43 +183,51 @@ def predict(images, ids, backgrounds, model_path1, model_path2):
         if len(cropped_images) != 0:
             for coin, circle in zip(cropped_images, circles):
                 coin_np = coin
-                #print(coin_np)
+                # detect circles
                 new_circle = detect_circles_classification(coin)
+                # preprocess image for input into the models
                 coin = transform(coin)
                 coin = coin.unsqueeze(0)
-
                 with torch.no_grad():
+                    # predict currency
                     outputs = model1(coin)
                 output = torch.argmax(outputs) # index 0 -> CHF, index 1 -> EUR, index 2 -> OOD
                 
-                if output == 0:
+                if output == 0: # CHF -> predict using area and color
                     area = circle_area(new_circle)
                     data_b = get_blue(coin_np)
                     label = classify_area_b(area, data_b)
-                    #label = classify_area(area)
-                
-                if output == 1:
+
+                if output == 1: # EUR -> predict using resnet18
                     with torch.no_grad():
                         outputs2 = model2(coin) # index 0 -> 0.01EUR, ..., index 7 -> 2EUR
                     inverted_label = 7 - torch.argmax(outputs2).item() # index 0 -> 2EUR, ..., index 7 -> 0.01EUR
                     label = 7 + inverted_label # index 7 -> 2EUR, ..., index 14 -> 0.01EUR
 
-                if output == 2:
+                if output == 2: # OOD
                     label = 15
-                
-                subclass[label] += 1 
+
+                # add the coin to the image prediction
+                subclass[label] += 1
+                # add subclass prediction to dic
                 subclasses[ids[i]] = subclass
-                pred[output] += 1 # add the coin to the image prediction
+                pred[output] += 1
 
         else:
             print(f'no coins detected in image {i}')
 
+        # add the prediction to dictionary
         predictions[ids[i]] = pred
         
     return predictions, subclasses
 
 
 def generate_csv_file(subclasses, csv_path):
+    """
+    From a dictionary containing the image labels and the number of each coin, creates a dataframe and save it as csv
+    :param subclasses: dictionary containing the prediction
+    :param csv_path: where to save the predictions
+    """
     # Convert dictionary to DataFrame
     df = pd.DataFrame.from_dict(subclasses, orient='index')
 
@@ -225,6 +243,9 @@ def generate_csv_file(subclasses, csv_path):
 
 def train_model(model, criterion, optimizer, scheduler, data_train, data_val, device, batch_size=4, num_epochs=25,
                 verbose=True, phases=['train', 'val']):
+    """
+    Train a deep learning model and returns the model at the best epoch.
+    """
     since = time.time()
     train_losses = []
     val_losses = []
@@ -249,11 +270,11 @@ def train_model(model, criterion, optimizer, scheduler, data_train, data_val, de
             # Each epoch has a training and validation phase
             for phase in phases:
                 if phase == 'train':
-                    model.train()  # Set model to training mode
+                    model.train()
                     dataloader = DataLoader(data_train, batch_size=batch_size, shuffle=True)
                     data_length = len(data_train)
                 else:
-                    model.eval()   # Set model to evaluate mode
+                    model.eval()
                     dataloader = DataLoader(data_val, batch_size=batch_size)
                     data_length = len(data_val)
 
@@ -283,11 +304,12 @@ def train_model(model, criterion, optimizer, scheduler, data_train, data_val, de
                         else:
                             preds.append(((torch.argmax(labels, dim=1)), preds_batch))
 
-                    # statistics
+                    # compute metrics
                     running_loss += loss.item() * inputs.size(0)
                     running_corrects += torch.sum(preds_batch == torch.argmax(labels, dim=1))
                     running_f1 += f1_score(preds_batch, torch.argmax(labels, dim=1), average='macro')
 
+                # compute epoch metrics
                 epoch_loss = running_loss/data_length
                 epoch_accuracy = running_corrects.double()/data_length
                 epoch_f1 = running_f1/len(dataloader)
@@ -307,7 +329,7 @@ def train_model(model, criterion, optimizer, scheduler, data_train, data_val, de
                     val_accuracies.append(epoch_accuracy)
                     val_f1.append(epoch_f1)
 
-                # deep copy the model
+                # copy the model
                 if phase == 'val' and epoch_f1 > best_f1:
                     best_f1 = epoch_f1
                     best_epoch = epoch

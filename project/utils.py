@@ -7,47 +7,46 @@ import cv2
 
 
 def downsample_images(original_path, save_path, size=(1500, 1000)):
+    """
+    Downsamples all images in original_path and saves them in save_path
+    :param original_path: where to load the images from
+    :param save_path: where to save the images
+    :param size: size to downsample the image to
+    :return:
+    """
     for root, dirs, files in os.walk(original_path):
         for file in files:
             if file.endswith('.JPG'):
                 # construct path to the image file
                 file_path = os.path.join(root, file)
                 im = Image.open(file_path)
-                downsampled_image = im.resize(size)  # Specify desired width and height
-                # Save the downsampled image
+                # downsample
+                downsampled_image = im.resize(size)
+                # save image
                 downsampled_image_save_path = os.path.join(save_path, file)
                 downsampled_image.save(downsampled_image_save_path)
 
 
 def plot_metric(train_metrics, val_metrics, title, ylabel):
+    """
+    Plot train and val metrics on the same graph.
+    """
     plt.plot(train_metrics, label='train')
     plt.plot(val_metrics, label='validation')
     plt.legend()
-    plt.grid()
     plt.title(title)
     plt.xlabel('Epoch')
     plt.ylabel(ylabel)
     plt.grid()
     plt.show()
 
-
-"""def compute_pred(outputs):
-    outputs = outputs.detach()
-    outputs_rounded = torch.round(outputs)
-    outputs_rounded[outputs_rounded < 0] = 0
-
-    return outputs_rounded"""
-
-
-"""def compute_accuracy(outputs, labels):
-    # preds = compute_pred(outputs)
-    outputs = outputs.detach()
-    n_correct = (np.array(outputs) == np.array(labels.tolist())).sum()
-    accuracy = n_correct/labels.numel()
-    return accuracy"""
-
-
 def compute_f1(outputs, labels):
+    """
+    Compute the f1 score according to the formula on Kaggle.
+    :param outputs: predicted labels
+    :param labels: ground truth labels
+    :return: f1-score
+    """
     preds = np.array(outputs)
     labels = np.array(labels)
     score = 0
@@ -61,6 +60,9 @@ def compute_f1(outputs, labels):
 
 
 def convert_np_to_pil(image_array):
+    """
+    Convert a numpy array to a pil image.
+    """
     pil_images = []
     for img in image_array:
         # Convert numpy array (height, width, channels) to PIL image
@@ -69,6 +71,11 @@ def convert_np_to_pil(image_array):
     return pil_images
 
 def calculate_circle_properties(circles, images):
+    """
+    Given a list of images and a corresponding list of circles, computes:
+    - the perimeter and the area of the circle
+    - the mean H, S, V, R, G and B values of the center 50x50 pixels
+    """
     if circles is None:
         return []
 
