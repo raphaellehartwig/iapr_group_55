@@ -11,18 +11,14 @@ def classify_background(image):
 
     if (np.sum(threshold_noisy)) > 1000000:
         background = "noisy"
-        #print(background)
-        return background
        
     elif np.sum(threshold_hand) > 500000:
         background = "hand"
-        #print(background)
-        return background
     
     else:
         background = "neutral"
-        #print(background)
-        return background
+
+    return background
 
 
 def classify_images_in_folders(base_folder):
