@@ -3,7 +3,9 @@ numpy
 matplotlib
 pandas
 torch
+torchvision
 Pillow
 torchvision
 scikit-learn
 scikit-image
+seaborn
